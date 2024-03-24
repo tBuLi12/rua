@@ -31,7 +31,7 @@ impl BcGen {
         use ast::Expr::*;
 
         match expr {
-            Nil(_) => {
+            Nil(_span) => {
                 self.instructions.push(Instruction::Nil);
                 self.get_next_id()
             }
@@ -43,8 +43,8 @@ impl BcGen {
                 self.instructions.push(Instruction::Number(number.value));
                 self.get_next_id()
             }
-            StringLit(stringLit) => self.string(stringLit.value.clone()),
-            Vararg(span) => {
+            StringLit(string_lit) => self.string(string_lit.value.clone()),
+            Vararg(_span) => {
                 unimplemented!()
                 // self.instructions.push(Instruction::Vai
             }
@@ -96,9 +96,9 @@ impl BcGen {
                 self.instructions.push(Instruction::Eq(lhs, rhs));
                 self.get_next_id()
             }
-            NotEq(notEq) => {
-                let lhs = self.gen_expr(&notEq.lhs);
-                let rhs = self.gen_expr(&notEq.rhs);
+            NotEq(not_eq) => {
+                let lhs = self.gen_expr(&not_eq.lhs);
+                let rhs = self.gen_expr(&not_eq.rhs);
                 self.instructions.push(Instruction::NotEq(lhs, rhs));
                 self.get_next_id()
             }
@@ -114,15 +114,15 @@ impl BcGen {
                 self.instructions.push(Instruction::Less(lhs, rhs));
                 self.get_next_id()
             }
-            GreaterEq(greaterEq) => {
-                let lhs = self.gen_expr(&greaterEq.lhs);
-                let rhs = self.gen_expr(&greaterEq.rhs);
+            GreaterEq(greater_eq) => {
+                let lhs = self.gen_expr(&greater_eq.lhs);
+                let rhs = self.gen_expr(&greater_eq.rhs);
                 self.instructions.push(Instruction::GreaterEq(lhs, rhs));
                 self.get_next_id()
             }
-            LessEq(lessEq) => {
-                let lhs = self.gen_expr(&lessEq.lhs);
-                let rhs = self.gen_expr(&lessEq.rhs);
+            LessEq(less_eq) => {
+                let lhs = self.gen_expr(&less_eq.lhs);
+                let rhs = self.gen_expr(&less_eq.rhs);
                 self.instructions.push(Instruction::LessEq(lhs, rhs));
                 self.get_next_id()
             }
@@ -207,40 +207,39 @@ impl BcGen {
 
         match statement {
             Assign(assign) => {
-                let values: Vec<_> = assign.rhs.iter().map(|expr| self.gen_expr(expr)).collect();
+                for expr in &assign.rhs {
+                    let value = self.gen_expr(expr);
+                    self.instructions.push(Instruction::PrepareAssign(value));
+                }
 
-                assign
-                    .lhs
-                    .iter()
-                    .zip(&values)
-                    .for_each(|(var, &value)| match var {
+                for var in &assign.lhs {
+                    match var {
                         ast::Variable::Variable(name) => {
                             if let Some(var) = self.resolve(name) {
-                                self.instructions.push(Instruction::Assign(var, value));
+                                self.instructions.push(Instruction::Assign(var));
                             } else {
-                                self.define_global(name, value);
+                                self.define_global(name);
                             }
                         }
                         ast::Variable::Index(index) => {
                             let table = self.gen_expr(&index.lhs);
                             let field = self.gen_expr(&index.idx);
 
-                            self.instructions.push(Instruction::SetField {
-                                table,
-                                field,
-                                value,
-                            });
+                            self.instructions
+                                .push(Instruction::SetField { table, field });
                         }
-                    });
+                    }
+                }
             }
             LocalAssign(assign) => {
-                let values: Vec<_> = assign
-                    .exprs
-                    .iter()
-                    .map(|expr| self.gen_expr(expr))
-                    .collect();
+                for expr in &assign.exprs {
+                    let value = self.gen_expr(expr);
+                    self.instructions.push(Instruction::PrepareAssign(value));
+                }
 
-                assign.vars.iter().zip(&values).for_each(|(var, &value)| {
+                assign.vars.iter().for_each(|var| {
+                    self.instructions.push(Instruction::Local);
+                    let value = self.get_next_id();
                     self.define_local(&var.name, value);
                 });
             }
@@ -276,13 +275,19 @@ impl BcGen {
                     self.instructions[jump.0] = Instruction::Jump(if_end);
                 }
             }
-            Repeat(repeat) => {}
-            For(for_stmt) => {}
-            NumericalFor(num_for) => {}
-            Label(label) => {
+            Repeat(_repeat) => {
                 unimplemented!()
             }
-            Goto(label) => {
+            For(_for_stmt) => {
+                unimplemented!()
+            }
+            NumericalFor(_num_for) => {
+                unimplemented!()
+            }
+            Label(_label) => {
+                unimplemented!()
+            }
+            Goto(_label) => {
                 unimplemented!()
             }
             Call(call) => {
@@ -300,8 +305,16 @@ impl BcGen {
                 }
                 self.get_call(func);
             }
-            Break => {}
-            Return(value) => {}
+            Break => {
+                unimplemented!()
+            }
+            Return(exprs) => {
+                for expr in &exprs.values {
+                    let value = self.gen_expr(expr);
+                    self.instructions.push(Instruction::PrepareReturn(value));
+                }
+                self.instructions.push(Instruction::Return);
+            }
         }
     }
 
@@ -388,12 +401,12 @@ impl BcGen {
         }
     }
 
-    fn define_global(&mut self, name: &ast::Ident, value: ValueId) {
+    fn define_global(&mut self, name: &ast::Ident) {
         let id = self.next_global_id;
         self.next_global_id += 1;
         let global = ValueId::Global(id);
 
-        self.instructions.push(Instruction::Assign(global, value));
+        self.instructions.push(Instruction::Assign(global));
         if self.scopes[0][0]
             .insert(name.value.clone(), global)
             .is_some()

@@ -1,12 +1,33 @@
+#[derive(Clone, Copy)]
 pub struct Position {
     pub line: u32,
     pub column: u32,
 }
 
+impl Position {
+    pub fn extend_back(self, count: u32) -> Span {
+        Span {
+            left: Position {
+                line: self.line,
+                column: self.column - count,
+            },
+            right: self,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct Span {
     pub left: Position,
     pub right: Position,
 }
+
+pub struct RuaError {
+    pub message: String,
+    pub span: Span,
+}
+
+pub type RuaResult<T> = Result<T, RuaError>;
 
 pub struct Ident {
     pub value: String,
@@ -30,22 +51,22 @@ pub struct Assign {
 
 pub struct While {
     pub condition: Expr,
-    pub body: Box<Statement>,
+    pub body: Vec<Statement>,
 }
 
 pub struct Repeat {
-    pub body: Box<Statement>,
+    pub body: Vec<Statement>,
     pub until: Expr,
 }
 
 pub struct Branch {
     pub condition: Expr,
-    pub body: Statement,
+    pub body: Vec<Statement>,
 }
 
 pub struct If {
     pub branches: Vec<Branch>,
-    pub else_body: Option<Box<Expr>>,
+    pub else_body: Option<Vec<Statement>>,
 }
 
 pub struct NumericalFor {
@@ -201,6 +222,7 @@ pub enum Expr {
     Vararg(Span),
     Variable(Variable),
     Call(Call),
+    MethodCall(MethodCall),
     Add(Add),
     Sub(Sub),
     Mul(Mul),

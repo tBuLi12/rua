@@ -21,3 +21,6 @@ dependencies = [
 [[package]]
 name = "rua-parser"
 version = "0.1.0"
+dependencies = [
+ "ast",
+]
