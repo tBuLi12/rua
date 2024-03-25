@@ -21,6 +21,12 @@ pub struct Map<R, F> {
 }
 
 #[derive(Clone, Copy)]
+pub struct TryMap<R, F> {
+    pub rule: R,
+    pub fun: F,
+}
+
+#[derive(Clone, Copy)]
 pub struct Fold<R, L, F> {
     pub first: R,
     pub rest: L,
@@ -95,6 +101,18 @@ where
 
     fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
         Ok(self.rule.parse(tokens)?.map(self.fun))
+    }
+}
+
+impl<R, F, Out> Rule for TryMap<R, F>
+where
+    R: Rule,
+    F: FnOnce(R::Output) -> RuaResult<Out> + Copy,
+{
+    type Output = Out;
+
+    fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+        self.rule.parse(tokens)?.map(self.fun).transpose()
     }
 }
 

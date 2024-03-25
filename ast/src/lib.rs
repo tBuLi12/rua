@@ -206,7 +206,7 @@ pub struct Len {
 }
 
 pub struct Field {
-    pub name: Box<Expr>,
+    pub name: Option<Box<Expr>>,
     pub value: Box<Expr>,
 }
 
@@ -262,7 +262,33 @@ pub enum Statement {
 }
 
 pub struct Function {
-    pub args: Vec<Ident>,
+    pub params: Vec<Ident>,
     pub vararg: bool,
     pub body: Vec<Statement>,
+}
+
+impl Expr {
+    pub fn expr_field(self, field: Expr) -> Variable {
+        Variable::Index(Index {
+            lhs: Box::new(self),
+            idx: Box::new(field),
+        })
+    }
+
+    pub fn named_field(self, name: Ident) -> Variable {
+        self.expr_field(Expr::StringLit(StringLit {
+            value: name.value,
+            span: name.span,
+        }))
+    }
+}
+
+impl Variable {
+    pub fn expr_field(self, field: Expr) -> Self {
+        Expr::Variable(self).expr_field(field)
+    }
+
+    pub fn named_field(self, name: Ident) -> Self {
+        Expr::Variable(self).named_field(name)
+    }
 }

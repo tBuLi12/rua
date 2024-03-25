@@ -171,7 +171,7 @@ impl BcGen {
                 self.scopes.push(vec![HashMap::new()]);
 
                 {
-                    for arg in &func.args {
+                    for arg in &func.params {
                         let val = self.get_next_id();
                         self.define_local(arg, val);
                     }
