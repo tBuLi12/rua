@@ -192,8 +192,9 @@ impl Rule for Punctuation {
     fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
         Ok(match tokens.current() {
             Token::Punctuation(punct, span) if *punct == self => {
-                tokens.next();
-                Some(*span)
+                let span = *span;
+                tokens.next()?;
+                Some(span)
             }
             _ => None,
         })
@@ -206,8 +207,9 @@ impl Rule for Keyword {
     fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
         Ok(match tokens.current() {
             Token::Keyword(kw, span) if *kw == self => {
-                tokens.next();
-                Some(*span)
+                let span = *span;
+                tokens.next()?;
+                Some(span)
             }
             _ => None,
         })
@@ -375,7 +377,73 @@ mod rule {
             .and_discard(Keyword::End)
     }
 
-    fn expr() -> impl Rule<Output = Expr> {}
+    fn expr() -> impl Rule<Output = Expr> {
+        or_expr
+    }
+
+    fn or_expr() -> impl Rule<Output = Expr> {
+        and_expr.fold(Keyword::And.discard_and(and_expr), |lhs, rhs| {
+            Expr::Or(Or {
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
+        })
+    }
+
+    fn and_expr() -> impl Rule<Output = Expr> {
+        comparison_expr.fold(Keyword::And.discard_and(comparison_expr), |lhs, rhs| {
+            Expr::And(And {
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
+        })
+    }
+
+    fn comparison_expr() -> impl Rule<Output = Expr> {
+        concat_expr.fold(
+            Punctuation::Less
+                .discard_and(concat_expr)
+                .or(Punctuation::Greater.discard_and(concat_expr))
+                .either()
+                .or(Punctuation::LessEq.discard_and(concat_expr))
+                .either()
+                .or(Punctuation::GreaterEq.discard_and(concat_expr))
+                .either()
+                .or(Punctuation::Equals.discard_and(concat_expr))
+                .either()
+                .or(Punctuation::WaveEq.discard_and(concat_expr))
+                .either(),
+            |lhs, rhs| {
+                use Either::*;
+                match rhs {
+                    Left(Left(Left(Left(Left(rhs))))) => Expr::Less(Less {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                    Left(Left(Left(Left(Right(rhs))))) => Expr::Greater(Greater {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                    Left(Left(Left(Right(rhs)))) => Expr::LessEq(LessEq {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                    Left(Left(Right(rhs))) => Expr::GreaterEq(GreaterEq {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                    Left(Right(rhs)) => Expr::Eq(Eq {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                    Right(rhs) => Expr::NotEq(NotEq {
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    }),
+                }
+            },
+        )
+    }
 
     fn concat_expr() -> impl Rule<Output = Expr> {
         additive_expr

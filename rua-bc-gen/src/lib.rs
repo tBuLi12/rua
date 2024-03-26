@@ -55,6 +55,7 @@ impl BcGen {
                 self.get_field(table, field)
             }
             Call(call) => self.gen_call(call),
+            MethodCall(method) => self.gen_method_call(method),
             Add(add) => {
                 let lhs = self.gen_expr(&add.lhs);
                 let rhs = self.gen_expr(&add.rhs);
@@ -155,8 +156,15 @@ impl BcGen {
                 self.get_next_id()
             }
             Table(table) => {
+                let mut i = 0;
                 for field in &table.fields {
-                    let name = self.gen_expr(&field.name);
+                    let name = if let Some(field_name) = &field.name {
+                        self.gen_expr(field_name)
+                    } else {
+                        self.instructions.push(Instruction::Number(i as f64));
+                        i += 1;
+                        self.get_next_id()
+                    };
                     let value = self.gen_expr(&field.value);
                     self.instructions
                         .push(Instruction::TablePrepare(name, value));
@@ -251,7 +259,7 @@ impl BcGen {
                 let cond = self.gen_expr(&while_stmt.condition);
                 let branch_inst = self.get_label_here();
                 self.instructions.push(Instruction::Nil);
-                self.gen_statement(&while_stmt.body);
+                self.gen_statements(&while_stmt.body);
                 self.instructions.push(Instruction::Jump(loop_start));
                 let loop_end = self.get_label_here();
                 self.instructions[branch_inst.0] = Instruction::Branch(cond, loop_end);
@@ -263,7 +271,7 @@ impl BcGen {
                     let cond = self.gen_expr(&branch.condition);
                     let branch_inst = self.get_label_here();
                     self.instructions.push(Instruction::Nil);
-                    self.gen_statement(&branch.body);
+                    self.gen_statements(&branch.body);
                     jumps.push(self.get_label_here());
                     self.instructions.push(Instruction::Nil);
                     let next_cond = self.get_label_here();
@@ -294,16 +302,7 @@ impl BcGen {
                 self.gen_call(call);
             }
             MethodCall(method) => {
-                let this = self.gen_expr(&method.lhs);
-                let name = self.string(method.name.value.clone());
-                let func = self.get_field(this, name);
-
-                self.instructions.push(Instruction::CallPrepare(this));
-                for arg in &method.args {
-                    let value = self.gen_expr(arg);
-                    self.instructions.push(Instruction::CallPrepare(value));
-                }
-                self.get_call(func);
+                self.gen_method_call(method);
             }
             Break => {
                 unimplemented!()
@@ -326,6 +325,19 @@ impl BcGen {
     fn gen_call(&mut self, call: &ast::Call) -> ValueId {
         let func = self.gen_expr(&call.lhs);
         for arg in &call.args {
+            let value = self.gen_expr(arg);
+            self.instructions.push(Instruction::CallPrepare(value));
+        }
+        self.get_call(func)
+    }
+
+    fn gen_method_call(&mut self, method: &ast::MethodCall) -> ValueId {
+        let this = self.gen_expr(&method.lhs);
+        let name = self.string(method.name.value.clone());
+        let func = self.get_field(this, name);
+
+        self.instructions.push(Instruction::CallPrepare(this));
+        for arg in &method.args {
             let value = self.gen_expr(arg);
             self.instructions.push(Instruction::CallPrepare(value));
         }
