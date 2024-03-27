@@ -72,6 +72,7 @@ pub enum Punctuation {
     Ellipsis,
 }
 
+#[derive(Debug)]
 pub enum Token {
     Ident(Ident),
     Number(Number),
@@ -111,6 +112,10 @@ impl<S: Source> Lexer<S> {
     }
 
     pub fn next(&mut self) -> RuaResult<Token> {
+        dbg!(self._next())
+    }
+
+    fn _next(&mut self) -> RuaResult<Token> {
         loop {
             match self.current {
                 Some(c) if c.is_whitespace() => {
@@ -144,7 +149,7 @@ impl<S: Source> Lexer<S> {
 
     fn read_ident_or_keyword(&mut self) -> RuaResult<Option<Token>> {
         match self.current {
-            Some(current) if current.is_alphabetic() => {}
+            Some(current) if current.is_alphabetic() || current == '_' => {}
             _ => return Ok(None),
         }
 

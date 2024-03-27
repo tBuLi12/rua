@@ -1,6 +1,6 @@
 [workspace]
 
 members = [
-    "ast", "rua-bc", "rua-bc-gen",
+    "ast", "rua", "rua-bc", "rua-bc-gen",
     "rua-parser",
 ]

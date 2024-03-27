@@ -129,7 +129,10 @@ where
             return Ok(None);
         };
 
+        eprintln!("fold parsed one {}", std::any::type_name::<L>());
+
         while let Some(right) = self.rest.parse(tokens)? {
+            eprintln!("fold parsed another");
             first = (self.fold)(first, right);
         }
 

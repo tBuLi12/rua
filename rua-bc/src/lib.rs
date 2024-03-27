@@ -1,15 +1,17 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ValueId {
     Local(usize),
     Global(usize),
     Capture(usize),
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct FuncId(pub usize);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Label(pub usize);
 
+#[derive(Debug)]
 pub enum Instruction {
     Nil,
     Bool(bool),

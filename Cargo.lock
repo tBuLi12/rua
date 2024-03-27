@@ -7,6 +7,15 @@ name = "ast"
 version = "0.1.0"
 
 [[package]]
+name = "rua"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "rua-bc-gen",
+ "rua-parser",
+]
+
+[[package]]
 name = "rua-bc"
 version = "0.1.0"
 

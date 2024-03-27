@@ -53,7 +53,16 @@ pub fn parse(chunk: &str) -> RuaResult<Vec<Statement>> {
         lexer,
     };
 
-    Ok(rule::statements.parse(&mut tokens)?.unwrap_or(vec![]))
+    let statements = rule::statements.parse(&mut tokens)?.unwrap_or(vec![]);
+
+    if !matches!(tokens.current(), Token::Eof(_)) {
+        return Err(RuaError {
+            message: "expected end of file".to_string(),
+            span: tokens.current().span(),
+        });
+    }
+
+    Ok(statements)
 }
 
 struct Parser<S> {
@@ -235,6 +244,44 @@ impl Rule for IdentRule {
     }
 }
 
+#[derive(Clone, Copy)]
+struct StringRule;
+
+impl Rule for StringRule {
+    type Output = StringLit;
+
+    fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+        Ok(match tokens.current() {
+            Token::String(_) => {
+                let Token::String(ident) = tokens.next()? else {
+                    unreachable!()
+                };
+                Some(ident)
+            }
+            _ => None,
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
+struct NumberRule;
+
+impl Rule for NumberRule {
+    type Output = Number;
+
+    fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+        Ok(match tokens.current() {
+            Token::Number(_) => {
+                let Token::Number(ident) = tokens.next()? else {
+                    unreachable!()
+                };
+                Some(ident)
+            }
+            _ => None,
+        })
+    }
+}
+
 impl Rule for () {
     type Output = ();
 
@@ -265,7 +312,21 @@ mod rule {
             })
     }
 
+    #[derive(Clone, Copy)]
+    struct StatementRule;
+
+    impl Rule for StatementRule {
+        type Output = Option<Statement>;
+        fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+            statement_fn.parse(tokens)
+        }
+    }
+
     fn statement() -> impl Rule<Output = Option<Statement>> {
+        StatementRule
+    }
+
+    fn statement_fn() -> impl Rule<Output = Option<Statement>> {
         Punctuation::Semicolon.map(|_| None).or(block
             .map(Statement::Block)
             .or(Keyword::While
@@ -302,13 +363,18 @@ mod rule {
                     Expr::MethodCall(call) => Ok(Either::Right(Statement::MethodCall(call))),
                     _ => Err(unimplemented!()),
                 })
-                .switch(Punctuation::Comma.discard_and(variable).repeated(), ())
+                .switch(
+                    Punctuation::Comma.discard_and(variable).repeated().and(
+                        Punctuation::Equals.discard_and(expr.separated_with(Punctuation::Comma)),
+                    ),
+                    (),
+                )
                 .map(|assign_or_call| match assign_or_call {
-                    Either::Left((first, mut vars)) => {
+                    Either::Left((first, (mut vars, exprs))) => {
                         vars.insert(0, first);
                         Statement::Assign(Assign {
                             lhs: vars,
-                            rhs: vec![],
+                            rhs: exprs,
                         })
                     }
                     Either::Right((statement, ())) => statement,
@@ -445,7 +511,21 @@ mod rule {
         )
     }
 
+    #[derive(Clone, Copy)]
+    struct ConcatExprRule;
+
+    impl Rule for ConcatExprRule {
+        type Output = Expr;
+        fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+            concat_expr_fn.parse(tokens)
+        }
+    }
+
     fn concat_expr() -> impl Rule<Output = Expr> {
+        ConcatExprRule
+    }
+
+    fn concat_expr_fn() -> impl Rule<Output = Expr> {
         additive_expr
             .and(
                 Punctuation::DoublePeriod
@@ -520,7 +600,21 @@ mod rule {
         )
     }
 
+    #[derive(Clone, Copy)]
+    struct UnaryExprRule;
+
+    impl Rule for UnaryExprRule {
+        type Output = Expr;
+        fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+            unary_expr_fn.parse(tokens)
+        }
+    }
+
     fn unary_expr() -> impl Rule<Output = Expr> {
+        UnaryExprRule
+    }
+
+    fn unary_expr_fn() -> impl Rule<Output = Expr> {
         Keyword::Not
             .discard_and(unary_expr)
             .map(|rhs| Expr::Not(Not { rhs: Box::new(rhs) }))
@@ -536,7 +630,21 @@ mod rule {
             .or(exponential_expr)
     }
 
+    #[derive(Clone, Copy)]
+    struct ExponentialExprRule;
+
+    impl Rule for ExponentialExprRule {
+        type Output = Expr;
+        fn parse(self, tokens: &mut impl Tokens) -> RuaResult<Option<Self::Output>> {
+            exponential_expr_fn.parse(tokens)
+        }
+    }
+
     fn exponential_expr() -> impl Rule<Output = Expr> {
+        ExponentialExprRule
+    }
+
+    fn exponential_expr_fn() -> impl Rule<Output = Expr> {
         primary_expr
             .and(Punctuation::Caret.discard_and(exponential_expr).optional())
             .map(|(lhs, rhs)| {
@@ -556,6 +664,8 @@ mod rule {
             .or(Keyword::Nil.map(Expr::Nil))
             .or(Keyword::True.map(|span| Expr::Bool(Bool { value: true, span })))
             .or(Keyword::False.map(|span| Expr::Bool(Bool { value: false, span })))
+            .or(StringRule.map(Expr::StringLit))
+            .or(NumberRule.map(Expr::Number))
             .or(Punctuation::Ellipsis.map(Expr::Vararg))
             .or(Keyword::Function.discard_and(func_body).map(Expr::Function))
             .or(table.map(Expr::Table))
