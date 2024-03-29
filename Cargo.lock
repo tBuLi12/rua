@@ -33,3 +33,10 @@ version = "0.1.0"
 dependencies = [
  "ast",
 ]
+
+[[package]]
+name = "rua-vm"
+version = "0.1.0"
+dependencies = [
+ "rua-bc",
+]

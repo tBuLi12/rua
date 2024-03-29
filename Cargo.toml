@@ -2,5 +2,5 @@
 
 members = [
     "ast", "rua", "rua-bc", "rua-bc-gen",
-    "rua-parser",
+    "rua-parser", "rua-vm",
 ]
