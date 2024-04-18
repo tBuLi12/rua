@@ -72,7 +72,7 @@ pub enum Punctuation {
     Ellipsis,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Token {
     Ident(Ident),
     Number(Number),
@@ -80,6 +80,16 @@ pub enum Token {
     Keyword(Keyword, Span),
     Punctuation(Punctuation, Span),
     Eof(Span),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TokenKind {
+    Ident,
+    Number,
+    String,
+    Keyword(Keyword),
+    Punctuation(Punctuation),
+    Eof,
 }
 
 impl Token {

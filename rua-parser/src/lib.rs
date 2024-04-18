@@ -46,6 +46,56 @@ impl lexer::Source for StrSource {
     }
 }
 
+mod gram {
+    use crate::lexer::{Keyword, Punctuation, Token, TokenKind};
+    use ast::Span;
+    use parser_builder::{grammar, single};
+
+    impl parser_builder::Token for Token {
+        type Kind = TokenKind;
+
+        fn kind(&self) -> Self::Kind {
+            match self {
+                Token::Ident(_) => TokenKind::Ident,
+                Token::String(_) => TokenKind::String,
+                Token::Number(_) => TokenKind::Number,
+                Token::Punctuation(punct, _) => TokenKind::Punctuation(*punct),
+                Token::Keyword(kw, _) => TokenKind::Keyword(*kw),
+                Token::Eof(_) => TokenKind::Eof,
+            }
+        }
+
+        fn inserted(kind: TokenKind) -> Token {
+            unimplemented!()
+        }
+    }
+
+    impl parser_builder::NamedRule for Punctuation {
+        type Token = Token;
+        type Output = Span;
+
+        fn get(self) -> impl parser_builder::Rule<Token = Self::Token, Output = Self::Output> {
+            single(TokenKind::Punctuation(self))
+        }
+    }
+
+    impl parser_builder::NamedRule for Keyword {
+        type Token = Token;
+        type Output = Span;
+
+        fn get(self) -> impl parser_builder::Rule<Token = Self::Token, Output = Self::Output> {
+            single(TokenKind::Keyword(self))
+        }
+    }
+
+    grammar! {
+        Token, TokenKind,
+        {
+            Prop: () => single(TokenKind::Ident).map(|_| ()),
+        }
+    }
+}
+
 pub fn parse(chunk: &str) -> RuaResult<Vec<Statement>> {
     let mut lexer = Lexer::new(StrSource::new(chunk))?;
     let mut tokens = Parser {
