@@ -1,3 +1,8 @@
+#![no_std]
+
+extern crate alloc;
+use alloc::{boxed::Box, string::String, vec::Vec};
+
 use ast::{RuaError, RuaResult};
 use rua_bc_gen::to_bytecode;
 use rua_parser::parse;

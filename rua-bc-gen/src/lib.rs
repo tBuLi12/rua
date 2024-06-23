@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+#![no_std]
+
+extern crate alloc;
+use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
 
 use rua_bc::{FuncId, Instruction, Label, ValueId};
 
@@ -6,7 +9,7 @@ pub fn to_bytecode(chunk: &[ast::Statement]) -> (Vec<Vec<Instruction>>, Vec<Inst
     let mut gen = BcGen {
         funs: vec![],
         instructions: vec![],
-        scopes: vec![vec![HashMap::new()]],
+        scopes: vec![vec![BTreeMap::new()]],
         captures: vec![],
         next_value_id: 0,
         next_global_id: 0,
@@ -20,7 +23,7 @@ pub fn to_bytecode(chunk: &[ast::Statement]) -> (Vec<Vec<Instruction>>, Vec<Inst
 struct BcGen {
     funs: Vec<Vec<Instruction>>,
     instructions: Vec<Instruction>,
-    scopes: Vec<Vec<HashMap<String, ValueId>>>,
+    scopes: Vec<Vec<BTreeMap<String, ValueId>>>,
     captures: Vec<ValueId>,
     next_value_id: usize,
     next_global_id: usize,
@@ -173,10 +176,10 @@ impl BcGen {
                 self.get_next_id()
             }
             Function(func) => {
-                let mut old_instructions = std::mem::replace(&mut self.instructions, vec![]);
-                let old_captures = std::mem::replace(&mut self.captures, vec![]);
-                let old_next_value_id = std::mem::replace(&mut self.next_value_id, 0);
-                self.scopes.push(vec![HashMap::new()]);
+                let mut old_instructions = core::mem::replace(&mut self.instructions, vec![]);
+                let old_captures = core::mem::replace(&mut self.captures, vec![]);
+                let old_next_value_id = core::mem::replace(&mut self.next_value_id, 0);
+                self.scopes.push(vec![BTreeMap::new()]);
 
                 {
                     for arg in &func.params {
@@ -193,7 +196,7 @@ impl BcGen {
                     old_instructions.push(Instruction::Function(FuncId(self.funs.len())));
                 }
 
-                let fun_instructions = std::mem::replace(&mut self.instructions, old_instructions);
+                let fun_instructions = core::mem::replace(&mut self.instructions, old_instructions);
                 self.captures = old_captures;
                 self.next_value_id = old_next_value_id;
                 self.scopes.pop();
@@ -369,7 +372,7 @@ impl BcGen {
     }
 
     fn scoped(&mut self, fun: impl FnOnce(&mut Self)) {
-        self.scopes.last_mut().unwrap().push(HashMap::new());
+        self.scopes.last_mut().unwrap().push(BTreeMap::new());
         let next_id = self.next_value_id;
         fun(self);
         self.instructions.push(Instruction::Drop(next_id));

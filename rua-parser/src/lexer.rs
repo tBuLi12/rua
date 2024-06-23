@@ -1,5 +1,6 @@
-use std::char;
+use core::{char, fmt::Display};
 
+use alloc::string::{String, ToString};
 use ast::{Ident, Number, Position, RuaError, RuaResult, Span, StringLit};
 
 pub struct Lexer<S> {
@@ -9,7 +10,7 @@ pub struct Lexer<S> {
     line: u32,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum Keyword {
     And,
     Break,
@@ -35,7 +36,7 @@ pub enum Keyword {
     While,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum Punctuation {
     Plus,
     Minus,
@@ -72,7 +73,7 @@ pub enum Punctuation {
     Ellipsis,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Token {
     Ident(Ident),
     Number(Number),
@@ -103,15 +104,33 @@ impl Token {
             Self::Eof(s) => *s,
         }
     }
+
+    pub fn kind(&self) -> TokenKind {
+        match self {
+            Self::Ident(_) => TokenKind::Ident,
+            Self::Number(_) => TokenKind::Number,
+            Self::String(_) => TokenKind::String,
+            Self::Keyword(kw, _) => TokenKind::Keyword(*kw),
+            Self::Punctuation(p, _) => TokenKind::Punctuation(*p),
+            Self::Eof(_) => TokenKind::Eof,
+        }
+    }
 }
 
 pub trait Source {
-    fn next(&mut self) -> RuaResult<Option<char>>;
+    type Error: Display;
+
+    fn next(&mut self) -> Result<Option<char>, Self::Error>;
+}
+
+pub enum LexerError<S: Source> {
+    Source(S::Error),
+    UnexpectedCharacter { span: Span, character: char },
 }
 
 impl<S: Source> Lexer<S> {
-    pub fn new(mut source: S) -> RuaResult<Self> {
-        let first = source.next()?;
+    pub fn new(mut source: S) -> Result<Self, LexerError<S>> {
+        let first = source.next().map_err(LexerError::Source)?;
 
         Ok(Lexer {
             source,
@@ -121,11 +140,7 @@ impl<S: Source> Lexer<S> {
         })
     }
 
-    pub fn next(&mut self) -> RuaResult<Token> {
-        dbg!(self._next())
-    }
-
-    fn _next(&mut self) -> RuaResult<Token> {
+    pub fn next(&mut self) -> Result<Token, LexerError<S>> {
         loop {
             match self.current {
                 Some(c) if c.is_whitespace() => {
@@ -144,8 +159,8 @@ impl<S: Source> Lexer<S> {
             .or_else(|| self.read_string_literal().transpose())
             .or_else(|| self.read_punctuation().transpose())
             .or_else(|| self.read_numeric_literal().transpose())
-            .ok_or_else(|| RuaError {
-                message: "unexpected character".to_string(),
+            .ok_or_else(|| LexerError::UnexpectedCharacter {
+                character: self.current.unwrap(),
                 span: self.current_position().extend_back(1),
             })?
     }
@@ -157,7 +172,7 @@ impl<S: Source> Lexer<S> {
         }
     }
 
-    fn read_ident_or_keyword(&mut self) -> RuaResult<Option<Token>> {
+    fn read_ident_or_keyword(&mut self) -> Result<Option<Token>, LexerError<S>> {
         match self.current {
             Some(current) if current.is_alphabetic() || current == '_' => {}
             _ => return Ok(None),
@@ -202,7 +217,7 @@ impl<S: Source> Lexer<S> {
         }))
     }
 
-    fn read_punctuation(&mut self) -> RuaResult<Option<Token>> {
+    fn read_punctuation(&mut self) -> Result<Option<Token>, LexerError<S>> {
         match self.current {
             Some(current) if current.is_ascii_punctuation() => {}
             _ => return Ok(None),
@@ -297,13 +312,15 @@ impl<S: Source> Lexer<S> {
             },
         };
 
-        punct.map(Some).ok_or_else(|| RuaError {
-            message: "unknown punctuation".to_string(),
-            span: self.current_position().extend_back(1),
-        })
+        punct
+            .map(Some)
+            .ok_or_else(|| LexerError::UnexpectedCharacter {
+                character: self.current.unwrap(),
+                span: self.current_position().extend_back(1),
+            })
     }
 
-    fn read_numeric_literal(&mut self) -> RuaResult<Option<Token>> {
+    fn read_numeric_literal(&mut self) -> Result<Option<Token>, LexerError<S>> {
         match self.current {
             Some(current) if current.is_digit(10) => {}
             _ => return Ok(None),
@@ -324,7 +341,7 @@ impl<S: Source> Lexer<S> {
         })))
     }
 
-    fn read_string_literal(&mut self) -> RuaResult<Option<Token>> {
+    fn read_string_literal(&mut self) -> Result<Option<Token>, LexerError<S>> {
         if self.current != Some('"') {
             return Ok(None);
         }
@@ -345,7 +362,7 @@ impl<S: Source> Lexer<S> {
         }
     }
 
-    fn read_char(&mut self) -> RuaResult<Option<char>> {
+    fn read_char(&mut self) -> Result<Option<char>, LexerError<S>> {
         let old = self.current;
 
         if let Some(char) = old {
@@ -357,7 +374,7 @@ impl<S: Source> Lexer<S> {
             }
         }
 
-        self.current = self.source.next()?;
+        self.current = self.source.next().map_err(LexerError::Source)?;
 
         Ok(old)
     }

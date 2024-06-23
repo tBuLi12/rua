@@ -7,10 +7,6 @@ name = "ast"
 version = "0.1.0"
 
 [[package]]
-name = "parser-builder"
-version = "0.1.0"
-
-[[package]]
 name = "rua"
 version = "0.1.0"
 dependencies = [
@@ -36,7 +32,6 @@ name = "rua-parser"
 version = "0.1.0"
 dependencies = [
  "ast",
- "parser-builder",
 ]
 
 [[package]]

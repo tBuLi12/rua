@@ -1,3 +1,8 @@
+#![no_std]
+
+extern crate alloc;
+use alloc::{boxed::Box, string::String, vec::Vec};
+
 #[derive(Clone, Copy, Debug)]
 pub struct Position {
     pub line: u32,
