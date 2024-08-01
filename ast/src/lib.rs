@@ -94,7 +94,7 @@ pub struct NumericalFor {
 
 #[derive(Debug)]
 pub struct For {
-    pub vars: Vec<Variable>,
+    pub vars: Vec<Ident>,
     pub exprs: Vec<Expr>,
     pub body: Vec<Statement>,
 }
@@ -172,6 +172,18 @@ pub struct Div {
 }
 
 #[derive(Debug)]
+pub struct IDiv {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Mod {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
 pub struct Pow {
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
@@ -231,6 +243,41 @@ pub struct Or {
 }
 
 #[derive(Debug)]
+pub struct BitAnd {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct BitOr {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct BitXor {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct ShiftLeft {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct ShiftRight {
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct BitNot {
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Debug)]
 pub struct Not {
     pub rhs: Box<Expr>,
 }
@@ -248,8 +295,8 @@ pub struct Len {
 
 #[derive(Debug)]
 pub struct Field {
-    pub name: Option<Box<Expr>>,
-    pub value: Box<Expr>,
+    pub name: Option<Expr>,
+    pub value: Expr,
 }
 
 #[derive(Debug)]
@@ -271,6 +318,8 @@ pub enum Expr {
     Sub(Sub),
     Mul(Mul),
     Div(Div),
+    IDiv(IDiv),
+    Mod(Mod),
     Pow(Pow),
     Neg(Neg),
     Eq(Eq),
@@ -282,6 +331,12 @@ pub enum Expr {
     And(And),
     Or(Or),
     Not(Not),
+    BitAnd(BitAnd),
+    BitOr(BitOr),
+    BitXor(BitXor),
+    BitNot(BitNot),
+    ShiftLeft(ShiftLeft),
+    ShiftRight(ShiftRight),
     Concat(Concat),
     Len(Len),
     Table(Table),

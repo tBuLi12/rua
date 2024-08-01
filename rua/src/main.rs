@@ -1,25 +1,12 @@
-#![no_std]
-
-extern crate alloc;
-use alloc::{boxed::Box, string::String, vec::Vec};
-
 use ast::{RuaError, RuaResult};
-use rua_bc_gen::to_bytecode;
+// use rua_bc_gen::to_bytecode;
 use rua_parser::parse;
 
 fn main() {
-    match rua_main() {
-        Ok(()) => {}
-        Err(RuaError { message, span }) => {
-            eprintln!(
-                "error: {} at line {} column {}",
-                message, span.left.line, span.left.column
-            );
-        }
-    }
+    rua_main()
 }
 
-fn rua_main() -> RuaResult<()> {
+fn rua_main() {
     let statements = parse(
         "
 a = 3;
@@ -29,20 +16,8 @@ function some()
 end
 some();
         ",
-    )?;
-    println!("{:?}", &statements);
-    let (funcs, code) = to_bytecode(&statements);
+    )
+    .unwrap();
 
-    for inst in code {
-        println!("{:?}", inst);
-    }
-
-    for (i, func) in funcs.iter().enumerate() {
-        println!("\n function {}", i);
-        for inst in func {
-            println!("{:?}", inst);
-        }
-    }
-
-    Ok(())
+    println!("{:#?}", statements);
 }

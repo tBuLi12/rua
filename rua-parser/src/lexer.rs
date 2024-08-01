@@ -1,4 +1,7 @@
-use core::{char, fmt::Display};
+use core::{
+    char,
+    fmt::{Debug, Display},
+};
 
 use alloc::string::{String, ToString};
 use ast::{Ident, Number, Position, RuaError, RuaResult, Span, StringLit};
@@ -118,11 +121,12 @@ impl Token {
 }
 
 pub trait Source {
-    type Error: Display;
+    type Error: Display + Debug;
 
     fn next(&mut self) -> Result<Option<char>, Self::Error>;
 }
 
+#[derive(Debug)]
 pub enum LexerError<S: Source> {
     Source(S::Error),
     UnexpectedCharacter { span: Span, character: char },
@@ -151,10 +155,12 @@ impl<S: Source> Lexer<S> {
         }
 
         if self.current.is_none() {
+            eprintln!("token eof");
             return Ok(Token::Eof(self.current_position().extend_back(1)));
         }
 
-        self.read_ident_or_keyword()
+        let token = self
+            .read_ident_or_keyword()
             .transpose()
             .or_else(|| self.read_string_literal().transpose())
             .or_else(|| self.read_punctuation().transpose())
@@ -162,7 +168,9 @@ impl<S: Source> Lexer<S> {
             .ok_or_else(|| LexerError::UnexpectedCharacter {
                 character: self.current.unwrap(),
                 span: self.current_position().extend_back(1),
-            })?
+            })??;
+        eprintln!("token {:?}", &token);
+        Ok(token)
     }
 
     fn current_position(&self) -> Position {
