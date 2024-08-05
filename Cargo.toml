@@ -1,6 +1,8 @@
 [workspace]
 
-members = [
-    "ast", "rua", "rua-bc", "rua-bc-gen",
-    "rua-parser", "rua-vm",
+members = [ 
+    "armv7-asm",
+    "ast", 
+    "rua", 
+    "rua-parser", 
 ]

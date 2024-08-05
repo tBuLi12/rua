@@ -3,6 +3,10 @@
 version = 3
 
 [[package]]
+name = "armv7-asm"
+version = "0.1.0"
+
+[[package]]
 name = "ast"
 version = "0.1.0"
 
@@ -11,20 +15,7 @@ name = "rua"
 version = "0.1.0"
 dependencies = [
  "ast",
- "rua-bc-gen",
  "rua-parser",
-]
-
-[[package]]
-name = "rua-bc"
-version = "0.1.0"
-
-[[package]]
-name = "rua-bc-gen"
-version = "0.1.0"
-dependencies = [
- "ast",
- "rua-bc",
 ]
 
 [[package]]
@@ -32,11 +23,4 @@ name = "rua-parser"
 version = "0.1.0"
 dependencies = [
  "ast",
-]
-
-[[package]]
-name = "rua-vm"
-version = "0.1.0"
-dependencies = [
- "rua-bc",
 ]

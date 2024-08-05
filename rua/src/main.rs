@@ -1,5 +1,3 @@
-use ast::{RuaError, RuaResult};
-// use rua_bc_gen::to_bytecode;
 use rua_parser::parse;
 
 fn main() {
