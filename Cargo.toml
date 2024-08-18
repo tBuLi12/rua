@@ -3,6 +3,6 @@
 members = [ 
     "armv7-asm",
     "ast", 
-    "rua", 
+    "rua", "rua-jit", 
     "rua-parser", 
 ]

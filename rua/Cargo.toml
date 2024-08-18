@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ast = { path = "../ast" }
 rua-parser = { path = "../rua-parser" }
+rua-jit = { path = "../rua-jit" }

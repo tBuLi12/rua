@@ -1,3 +1,6 @@
+use std::ptr;
+
+use rua_jit::{jit, Jit};
 use rua_parser::parse;
 
 fn main() {
@@ -5,17 +8,14 @@ fn main() {
 }
 
 fn rua_main() {
-    let statements = parse(
-        "
-a = 3;
-b = a + 4;
-function some()
-    d = a;
-end
-some();
-        ",
-    )
-    .unwrap();
+    let statements = parse("print(10)").unwrap();
 
-    println!("{:#?}", statements);
+    //     println!("{:#?}", statements);
+    unsafe { Jit::heap_init() };
+
+    let fun = jit(&statements);
+    println!(
+        "{:?}",
+        unsafe { fun.exec(0, ptr::null_mut(), ptr::null_mut()) }.unpack()
+    );
 }
