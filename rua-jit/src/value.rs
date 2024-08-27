@@ -1,4 +1,7 @@
-use std::ptr;
+use std::{
+    ops::Deref,
+    ptr::{self, copy_nonoverlapping},
+};
 
 use crate::Function;
 
@@ -9,6 +12,7 @@ pub struct Value(usize);
 pub enum Tagged {
     Float(f32),
     Function(*mut Function),
+    String(String),
 }
 
 // pointers
@@ -18,7 +22,8 @@ pub enum Tagged {
 // 1111 1111 1110
 
 static mut PTR_BASE_VALUE: *mut u8 = ptr::null_mut();
-static mut NEXT_FREE: *mut u8 = ptr::null_mut();
+static mut BOTTOM: *mut u8 = ptr::null_mut();
+static mut TOP: *mut u8 = ptr::null_mut();
 
 fn as_ptr(tagged_index: usize) -> *mut u8 {
     if tagged_index >= 1 << 20 {
@@ -36,25 +41,56 @@ fn as_tagged_index(ptr: *mut u8) -> usize {
     (offset as usize) | 0xfff0000000000000
 }
 
-pub unsafe fn set_ptr_base(base: *mut u8) {
+pub unsafe fn set_heap(base: *mut u8, size: usize) {
     unsafe {
         PTR_BASE_VALUE = base;
-        NEXT_FREE = base;
+        BOTTOM = base;
+        TOP = base.add(size);
     }
 }
 
 pub unsafe fn alloc() -> *mut usize {
     unsafe {
-        let ptr = NEXT_FREE as *mut usize;
-        NEXT_FREE = NEXT_FREE.byte_add(8);
+        let ptr = BOTTOM as *mut usize;
+        BOTTOM = BOTTOM.byte_add(8);
+
+        if BOTTOM >= TOP {
+            oom()
+        }
+
         ptr
     }
+}
+
+pub unsafe fn alloc_top(size: usize) -> *mut u8 {
+    TOP = TOP.sub(size);
+
+    if TOP < BOTTOM {
+        oom()
+    }
+
+    TOP
+}
+
+fn oom() -> ! {
+    eprintln!("Out of memory");
+    std::process::exit(1)
+}
+
+fn string_too_long() -> ! {
+    eprintln!("String too long");
+    std::process::exit(1)
 }
 
 impl Value {
     pub fn unpack(self) -> Tagged {
         if self.0 & 0xfff0000000000000 == 0xfff0000000000000 {
-            Tagged::Function(as_ptr(self.0) as *mut _)
+            let ptr = as_ptr(self.0);
+            if ptr >= unsafe { TOP } {
+                Tagged::String(String { ptr: ptr as *mut _ })
+            } else {
+                Tagged::Function(as_ptr(self.0) as *mut _)
+            }
         } else {
             Tagged::Float(f32::from_bits((self.0 >> 32) as u32))
         }
@@ -78,6 +114,52 @@ impl Tagged {
                 Value((bits as usize) << 32)
             }
             Self::Function(fun) => Value(as_tagged_index(fun as *mut _)),
+            Self::String(string) => Value(as_tagged_index(string.ptr as *mut u8)),
         }
+    }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct String {
+    ptr: *mut u16,
+}
+
+impl String {
+    pub fn new(value: &str) -> String {
+        if value.len() > u16::MAX as usize {
+            string_too_long();
+        }
+
+        unsafe {
+            let ptr = alloc_top(value.len() + 2);
+            copy_nonoverlapping(value.as_ptr(), ptr, value.len());
+            let size_ptr = ptr.add(value.len()) as *mut u16;
+            *size_ptr = value.len() as u16;
+            String { ptr: size_ptr }
+        }
+    }
+}
+
+impl Deref for String {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            let size = *self.ptr;
+            let ptr = self.ptr as *mut u8;
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                ptr.sub(size as usize),
+                size as usize,
+            ))
+        }
+    }
+}
+
+struct Object {}
+
+impl Object {
+    pub fn new() -> Object {
+        Object {}
     }
 }

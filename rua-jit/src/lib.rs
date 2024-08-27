@@ -8,10 +8,10 @@ use iced_x86::code_asm::{
     dword_ptr, qword_ptr, r8, r9, rax, rbp, rcx, rdx, rsp, AsmMemoryOperand, CodeAssembler,
 };
 use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction, NasmFormatter};
-use value::{alloc, set_ptr_base, Tagged, Value};
+use value::{alloc, set_heap, Tagged, Value};
 use windows::Win32::System::Memory;
 
-mod value;
+pub mod value;
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
@@ -110,7 +110,7 @@ impl Jit {
             panic!("VirtualAlloc failed");
         }
 
-        set_ptr_base(heap as *mut u8)
+        set_heap(heap as *mut u8, 1 << 20)
     }
 
     fn new() -> Jit {

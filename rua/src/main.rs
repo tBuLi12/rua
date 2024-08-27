@@ -13,9 +13,13 @@ fn rua_main() {
     //     println!("{:#?}", statements);
     unsafe { Jit::heap_init() };
 
-    let fun = jit(&statements);
-    println!(
-        "{:?}",
-        unsafe { fun.exec(0, ptr::null_mut(), ptr::null_mut()) }.unpack()
-    );
+    // let fun = jit(&statements);
+    // println!(
+    //     "{:?}",
+    //     unsafe { fun.exec(0, ptr::null_mut(), ptr::null_mut()) }.unpack()
+    // );
+
+    let str = rua_jit::value::String::new("Hello, world!");
+
+    println!("{}", &*str);
 }
