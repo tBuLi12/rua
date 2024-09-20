@@ -1,6 +1,6 @@
 // #![no_std]
 
-use std::{collections::HashMap, os, process::id};
+use std::collections::HashMap;
 
 use ast::{Add, Assign, Call, Expr, Ident, Index, Number, Statement, Variable};
 use iced_x86::code_asm::{
@@ -9,8 +9,8 @@ use iced_x86::code_asm::{
 };
 use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction, NasmFormatter};
 use value::{alloc, set_heap, Tagged, Value};
-use windows::Win32::System::Memory;
 
+pub mod heap;
 pub mod value;
 
 #[derive(Clone, Copy)]
@@ -18,14 +18,6 @@ pub mod value;
 pub struct Function {
     code_buffer: *mut u8,
 }
-
-// impl Drop for Function {
-//     fn drop(&mut self) {
-//         unsafe {
-//             Memory::VirtualFree(self.code_buffer as *mut _, 0, Memory::MEM_RELEASE);
-//         }
-//     }
-// }
 
 impl Function {
     pub fn exec(
@@ -47,7 +39,9 @@ impl Function {
 
 pub fn jit(chunk: &[Statement]) -> Function {
     let mut jit = Jit::new();
+    jit.prologue();
     jit.statements(chunk);
+    jit.epilogue();
     jit.get_function()
 }
 
@@ -72,7 +66,8 @@ extern "C" fn rua_call(
     match fun.unpack() {
         Tagged::Function(fun) => unsafe { *fun }.exec(arg_count, args_ptr, frame_base),
         _ => {
-            eprintln!("Call to non-function");
+            eprintln!("arg {:016X}", unsafe { *args_ptr }.bits());
+            eprintln!("Call to non-function {:016X}", fun.bits());
             std::process::exit(1)
         }
     }
@@ -80,7 +75,7 @@ extern "C" fn rua_call(
 
 extern "C" fn rua_add(lhs: Value, rhs: Value) -> Value {
     match (lhs.unpack(), rhs.unpack()) {
-        (Tagged::Float(l), Tagged::Float(r)) => Tagged::Float(l + r).pack(),
+        (Tagged::Number(l), Tagged::Number(r)) => Tagged::Number(l + r).pack(),
         _ => {
             eprintln!("Invalid addition operands");
             std::process::exit(1)
@@ -93,8 +88,13 @@ extern "C" fn rua_print(
     args_ptr: *mut Value,
     frame_base: *mut FrameBase,
 ) -> Value {
-    eprintln!("Rua print");
-    std::process::exit(1)
+    let args = unsafe { std::slice::from_raw_parts(args_ptr, arg_count) };
+    eprintln!("Rua print, {}", arg_count);
+    for arg in args {
+        println!("{:?}", arg.unpack());
+    }
+
+    Tagged::Number(0.0).pack()
 }
 
 impl Jit {
@@ -113,7 +113,7 @@ impl Jit {
         set_heap(heap as *mut u8, 1 << 20)
     }
 
-    fn new() -> Jit {
+    pub fn new() -> Jit {
         Jit {
             asm: CodeAssembler::new(64).unwrap(),
             frame_size: 0,
@@ -122,6 +122,8 @@ impl Jit {
                 Box::into_raw(Box::new(
                     Tagged::Function(unsafe {
                         let ptr = alloc() as *mut Function;
+                        dbg!(ptr);
+                        dbg!(rua_print as *mut u8);
                         ptr.write(Function {
                             code_buffer: rua_print as *mut u8,
                         });
@@ -140,7 +142,7 @@ impl Jit {
         CodeAssembler: CodeAsmPush<T>,
     {
         self.asm
-            .add(qword_ptr(rsp - self.frame_size as i32), 1)
+            .add(qword_ptr(rsp + self.frame_size * 8), 1)
             .unwrap();
         self.frame_size += 1;
         self.asm.push(value).unwrap();
@@ -149,7 +151,9 @@ impl Jit {
     }
 
     fn pop_slots(&mut self, n: i32) {
-        self.asm.sub(qword_ptr(rsp - self.frame_size), n).unwrap();
+        self.asm
+            .sub(qword_ptr(rsp + self.frame_size * 8), n)
+            .unwrap();
         self.frame_size -= n as usize;
     }
 
@@ -176,11 +180,20 @@ impl Jit {
     }
 
     fn slot(&self, offset: usize) -> AsmMemoryOperand {
-        qword_ptr(rsp - self.frame_size + offset)
+        qword_ptr(rsp + (self.frame_size - offset) * 8)
     }
 
     fn frame_base(&self) -> AsmMemoryOperand {
-        qword_ptr(rsp - self.frame_size - 1)
+        qword_ptr(rsp + self.frame_size * 8)
+    }
+
+    fn prologue(&mut self) {
+        self.asm.push(0).unwrap();
+    }
+
+    fn epilogue(&mut self) {
+        self.asm.add(rsp, (self.frame_size as i32 + 1) * 8).unwrap();
+        self.asm.ret().unwrap();
     }
 
     fn statements(&mut self, statements: &[Statement]) {
@@ -197,11 +210,11 @@ impl Jit {
                         self.expr(&arg);
                         self.push(rax);
                     }
-                    self.asm.sub(rsp, 32).unwrap();
                     self.asm.mov(rcx, args.len() as u64).unwrap();
                     self.asm.lea(rdx, self.slot(args_base)).unwrap();
                     self.asm.lea(r8, self.frame_base()).unwrap();
                     self.asm.mov(r9, self.slot(fun)).unwrap();
+                    self.asm.sub(rsp, 32).unwrap();
                     self.asm.call(rua_call as u64).unwrap();
                     self.asm.add(rsp, 32).unwrap();
                     self.pop_many(args.len());
@@ -223,6 +236,8 @@ impl Jit {
         match expr {
             Expr::Variable(Variable::Variable(ident)) => {
                 if let Some(&value) = self.globals.get(&ident.value) {
+                    dbg!(value);
+                    eprintln!("resolved: {:016X}", unsafe { *value }.bits());
                     self.asm.mov(rax, qword_ptr(value as usize)).unwrap();
                 } else {
                     eprintln!("Undefined variable {}", ident.value);
@@ -241,7 +256,7 @@ impl Jit {
             Expr::Number(Number { value, .. }) => {
                 let value = *value as f32;
                 self.asm
-                    .mov(rax, Tagged::Float(value).pack().bits() as u64)
+                    .mov(rax, Tagged::Number(value).pack().bits() as u64)
                     .unwrap()
             }
             _ => unimplemented!(),

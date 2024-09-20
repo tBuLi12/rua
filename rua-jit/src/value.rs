@@ -5,14 +5,20 @@ use std::{
 
 use crate::Function;
 
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct Value(usize);
 
 #[derive(Debug)]
 pub enum Tagged {
-    Float(f32),
+    Number(f32),
     Function(*mut Function),
     String(String),
+    // Nil,
+    // Bool,
+    // UserData,
+    // Thread,
+    // Table,
 }
 
 // pointers
@@ -25,12 +31,13 @@ static mut PTR_BASE_VALUE: *mut u8 = ptr::null_mut();
 static mut BOTTOM: *mut u8 = ptr::null_mut();
 static mut TOP: *mut u8 = ptr::null_mut();
 
-fn as_ptr(tagged_index: usize) -> *mut u8 {
+fn as_ptr(mut tagged_index: usize) -> *mut u8 {
+    tagged_index &= 0x000fffffffffffff;
     if tagged_index >= 1 << 20 {
         panic!("invalid tagged index")
     }
 
-    unsafe { PTR_BASE_VALUE.add(tagged_index & 0x000fffffffffffff) }
+    unsafe { PTR_BASE_VALUE.add(tagged_index) }
 }
 
 fn as_tagged_index(ptr: *mut u8) -> usize {
@@ -89,10 +96,10 @@ impl Value {
             if ptr >= unsafe { TOP } {
                 Tagged::String(String { ptr: ptr as *mut _ })
             } else {
-                Tagged::Function(as_ptr(self.0) as *mut _)
+                Tagged::Function(ptr as *mut _)
             }
         } else {
-            Tagged::Float(f32::from_bits((self.0 >> 32) as u32))
+            Tagged::Number(f32::from_bits((self.0 >> 32) as u32))
         }
     }
 
@@ -104,7 +111,7 @@ impl Value {
 impl Tagged {
     pub fn pack(self) -> Value {
         match self {
-            Self::Float(value) => {
+            Self::Number(value) => {
                 let mut bits = value.to_bits();
                 if value.is_nan() {
                     bits &= 0x000fffff;
@@ -152,6 +159,7 @@ impl Deref for String {
                 ptr.sub(size as usize),
                 size as usize,
             ))
+            
         }
     }
 }
