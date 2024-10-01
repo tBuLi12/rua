@@ -3,81 +3,36 @@ use std::{
     ptr::{self, copy_nonoverlapping},
 };
 
-use crate::Function;
+use crate::{
+    heap::{self, as_ptr, as_tagged_index, ObjectHeader},
+    Function,
+};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 #[repr(transparent)]
-pub struct Value(usize);
+pub struct Value(u32);
 
 #[derive(Debug)]
 pub enum Tagged {
-    Number(f32),
-    Function(*mut Function),
-    String(String),
-    // Nil,
-    // Bool,
-    // UserData,
-    // Thread,
     // Table,
+    Function(*mut Function),
+    // Thread,
+    // UserData,
+    String(String),
+    Number(f32),
+    Bool,
+    Nil,
 }
+
+// nans
+// 1111 1111 110x
+// 1111 1111 101x
+
+// values
+// 1111 1111 1110
 
 // pointers
 // 1111 1111 1111
-
-// nans
-// 1111 1111 1110
-
-static mut PTR_BASE_VALUE: *mut u8 = ptr::null_mut();
-static mut BOTTOM: *mut u8 = ptr::null_mut();
-static mut TOP: *mut u8 = ptr::null_mut();
-
-fn as_ptr(mut tagged_index: usize) -> *mut u8 {
-    tagged_index &= 0x000fffffffffffff;
-    if tagged_index >= 1 << 20 {
-        panic!("invalid tagged index")
-    }
-
-    unsafe { PTR_BASE_VALUE.add(tagged_index) }
-}
-
-fn as_tagged_index(ptr: *mut u8) -> usize {
-    let offset = unsafe { ptr.byte_offset_from(PTR_BASE_VALUE) };
-    if offset < 0 || offset >= 1 << 20 {
-        panic!("invalid pointer")
-    }
-    (offset as usize) | 0xfff0000000000000
-}
-
-pub unsafe fn set_heap(base: *mut u8, size: usize) {
-    unsafe {
-        PTR_BASE_VALUE = base;
-        BOTTOM = base;
-        TOP = base.add(size);
-    }
-}
-
-pub unsafe fn alloc() -> *mut usize {
-    unsafe {
-        let ptr = BOTTOM as *mut usize;
-        BOTTOM = BOTTOM.byte_add(8);
-
-        if BOTTOM >= TOP {
-            oom()
-        }
-
-        ptr
-    }
-}
-
-pub unsafe fn alloc_top(size: usize) -> *mut u8 {
-    TOP = TOP.sub(size);
-
-    if TOP < BOTTOM {
-        oom()
-    }
-
-    TOP
-}
 
 fn oom() -> ! {
     eprintln!("Out of memory");
@@ -91,20 +46,24 @@ fn string_too_long() -> ! {
 
 impl Value {
     pub fn unpack(self) -> Tagged {
-        if self.0 & 0xfff0000000000000 == 0xfff0000000000000 {
+        if self.0 & 0xfff00000 == 0xfff00000 {
             let ptr = as_ptr(self.0);
-            if ptr >= unsafe { TOP } {
+            if ptr >= unsafe { heap::TOP } {
                 Tagged::String(String { ptr: ptr as *mut _ })
             } else {
                 Tagged::Function(ptr as *mut _)
             }
         } else {
-            Tagged::Number(f32::from_bits((self.0 >> 32) as u32))
+            Tagged::Number(f32::from_bits(self.0))
         }
     }
 
-    pub fn bits(self) -> usize {
+    pub fn bits(self) -> u32 {
         self.0
+    }
+
+    pub fn nil() -> Value {
+        Value(0xfff00000)
     }
 }
 
@@ -118,7 +77,7 @@ impl Tagged {
                     bits |= 0xffe00000;
                 }
 
-                Value((bits as usize) << 32)
+                Value(bits)
             }
             Self::Function(fun) => Value(as_tagged_index(fun as *mut _)),
             Self::String(string) => Value(as_tagged_index(string.ptr as *mut u8)),
@@ -139,7 +98,7 @@ impl String {
         }
 
         unsafe {
-            let ptr = alloc_top(value.len() + 2);
+            let ptr = heap::alloc_top(value.len() + 2);
             copy_nonoverlapping(value.as_ptr(), ptr, value.len());
             let size_ptr = ptr.add(value.len()) as *mut u16;
             *size_ptr = value.len() as u16;
@@ -159,15 +118,41 @@ impl Deref for String {
                 ptr.sub(size as usize),
                 size as usize,
             ))
-            
         }
     }
 }
 
-struct Object {}
+struct Object {
+    header: *mut ObjectHeader,
+}
 
 impl Object {
     pub fn new() -> Object {
-        Object {}
+        Object {
+            header: unsafe { heap::alloc_object_header() },
+        }
+    }
+
+    pub fn set(&self, key: Value, value: Value) {
+        unimplemented!()
+    }
+
+    pub fn get(&self, key: Value) -> Value {
+        let header = unsafe { &*self.header };
+        if header.body().is_null() {
+            return Value::nil();
+        }
+
+        let body = unsafe { &*header.body() };
+        let len = body.len() as usize;
+        let values = unsafe { std::slice::from_raw_parts(header.body().add(1) as *mut Value, len) };
+
+        for [current_key, value] in values.chunks_exact(2) {
+            if key == *current_key {
+                return *value;
+            }
+        }
+
+        Value::nil()
     }
 }

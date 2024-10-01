@@ -98,21 +98,6 @@ extern "C" fn rua_print(
 }
 
 impl Jit {
-    pub unsafe fn heap_init() {
-        let heap = Memory::VirtualAlloc(
-            None,
-            1 << 20,
-            Memory::MEM_COMMIT | Memory::MEM_RESERVE,
-            Memory::PAGE_READWRITE,
-        );
-
-        if heap.is_null() {
-            panic!("VirtualAlloc failed");
-        }
-
-        set_heap(heap as *mut u8, 1 << 20)
-    }
-
     pub fn new() -> Jit {
         Jit {
             asm: CodeAssembler::new(64).unwrap(),
@@ -322,32 +307,6 @@ impl Jit {
 
         Function {
             code_buffer: code_buffer as *mut u8,
-        }
-    }
-
-    pub fn test(a: usize, b: usize) -> usize {
-        let mut asm = CodeAssembler::new(64).unwrap();
-        asm.add(rcx, rdx).unwrap();
-        asm.mov(rax, rcx).unwrap();
-        asm.ret().unwrap();
-        let bytes = asm.assemble(0).unwrap();
-
-        unsafe {
-            let ptr = Memory::VirtualAlloc(
-                None,
-                bytes.len(),
-                Memory::MEM_COMMIT | Memory::MEM_RESERVE,
-                Memory::PAGE_EXECUTE_READWRITE,
-            );
-
-            if ptr.is_null() {
-                panic!("VirtualAlloc failed");
-            }
-
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
-
-            let func: extern "C" fn(usize, usize) -> usize = std::mem::transmute(ptr);
-            func(a, b)
         }
     }
 }
